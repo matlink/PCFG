@@ -16,6 +16,7 @@ class Pcfg:
             self.type[digit] = 'D'
         self.base = ddict(float)
         self.terminals = ddict(dict)
+        self.ordered_terms = dict()
 
     def learn(self, filename):
         with open(filename) as _buffer:
@@ -72,27 +73,62 @@ class Pcfg:
         base = '_'.join([_type+str(occ) for _type, occ in chain])
         self.base[base] += 1
 
-    def enumpwd(self):
+    def enumpwd(self, rate=0.1):
         pq = PriorityQueue()
         # init priority queue
-        for base, proba in self.base.items():
-            preterm = ""
+        for index, (base, proba) in enumerate(sorted(self.base.items(), key=lambda x:x[1], reverse=True)):
+            if (index/len(self.base)) > rate:
+                break
+            preterm = list()
             prob = proba
             for _type_str in base.split('_'):
                 if _type_str[0] == 'L':
-                    preterm += _type_str+'_'
+                    preterm.append(_type_str)
                     continue
                 term_probas = self.terminals[_type_str]
                 highest = max(term_probas.items(), key=lambda x:x[1])
-                preterm += highest[0]
+                preterm.append(highest[0])
                 proba *= highest[1]
-            preterm = preterm.rstrip('_')
             pq.put((1-proba, base, preterm, 0))
-#       while not pq.empty():
-#           print(pq.get())
+
+        # start enumeration
+        while not pq.empty():
+            prob, base, preterm, pivot = pq.get()
+            prob = 1-prob
+            self.print(preterm)
+            type_str = base.split('_')
+            for index in range(pivot, len(type_str)):
+                cur_term = preterm[index]
+                if cur_term[0] == 'L': continue
+                cur_term_proba = self.terminals[type_str[index]][cur_term]
+                _next = self.next(type_str[index], cur_term)
+                if _next is None: continue
+                next_term, proba = _next
+                preterm[index] = next_term
+                prob /= cur_term_proba
+                prob *= proba
+                pq.put((1-prob, base, preterm, index))
+
+    def next(self, type_str, cur_term):
+        if type_str in self.ordered_terms:
+            ordered_terms = self.ordered_terms[type_str]
+        else:
+            ordered_terms = sorted(self.terminals[type_str].items(), key=lambda x:x[1])
+            self.ordered_terms[type_str] = ordered_terms
+        if cur_term == ordered_terms[-1][0]:
+            return None
+        for index, (term, proba) in enumerate(ordered_terms):
+            if term == cur_term:
+                break
+        return ordered_terms[index+1]
+
+    def print(self, preterm):
+        print('_'.join(preterm))
 
 if __name__ == '__main__':
     filename = sys.argv[1]
     pcfg = Pcfg()
+    print('parsing ...', file=sys.stderr)
     pcfg.learn(filename)
+    print('enum ...', file=sys.stderr)
     pcfg.enumpwd()
