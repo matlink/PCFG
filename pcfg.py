@@ -14,11 +14,29 @@ class Pcfg:
             self.type[alpha] = 'L'
         for digit in string.digits:
             self.type[digit] = 'D'
+        """ e.g.
+        {"L6_D2": 0.1,
+         "L4_D2": 0.9,
+        }
+        """
         self.base = ddict(float)
+        """ e.g.
+        {"D1": {"0": 0.1,
+                "1": 0.9},
+         "S4": {"!!!!": 0.2,
+                "$$$$": 0.8}
+        }
+        """
         self.terminals = ddict(dict)
         self.ordered_terms = dict()
 
     def learn(self, filename):
+        """
+        Iterate over filename,
+        parse each word,
+        and normalize probas
+        between [0,1]
+        """
         with open(filename) as _buffer:
             for word in _buffer:
                 word = word.rstrip('\n\r')
@@ -35,6 +53,13 @@ class Pcfg:
                 term_proba[term] = proba / nb_terms
 
     def parse(self, word):
+        """
+        Compute the base structure of word
+        and increment its number of occurences.
+        Then for each type-string, increment
+        the number of the corresponding
+        substring from word.
+        """
         if len(word) == 0:
             return
         chain = list()
@@ -73,9 +98,19 @@ class Pcfg:
         base = '_'.join([_type+str(occ) for _type, occ in chain])
         self.base[base] += 1
 
-    def enumpwd(self, rate=0.1):
+    def enumpwd(self, rate=1):
+        """
+        Initialize the prority queue
+        by putting all the base structures
+        with their most probable preterminals.
+        Then get the most probable element
+        from this queue, print it, and compute the
+        next most probable preterminal of the given
+        base structure and add it to the queue.
+        """
         pq = PriorityQueue()
         # init priority queue
+        print(len(self.base), file=sys.stderr)
         for index, (base, proba) in enumerate(sorted(self.base.items(), key=lambda x:x[1], reverse=True)):
             if (index/len(self.base)) > rate:
                 break
@@ -89,6 +124,7 @@ class Pcfg:
                 highest = max(term_probas.items(), key=lambda x:x[1])
                 preterm.append(highest[0])
                 proba *= highest[1]
+            # to reverse the queue order, we want the highest proba first
             pq.put((1-proba, base, preterm, 0))
 
         # start enumeration
@@ -110,6 +146,11 @@ class Pcfg:
                 pq.put((1-prob, base, preterm, index))
 
     def next(self, type_str, cur_term):
+        """
+        Return the next most probable terminal
+        given the previously used terminal.
+        Also return its probability.
+        """
         if type_str in self.ordered_terms:
             ordered_terms = self.ordered_terms[type_str]
         else:
