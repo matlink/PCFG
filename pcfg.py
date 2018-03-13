@@ -15,7 +15,6 @@ class Pcfg:
             self.type[digit] = 'D'
         self.base = ddict(float)
         self.terminals = ddict(dict)
-        self.preterminals = ddict(float)
 
     def learn(self, filename):
         with open(filename) as _buffer:
@@ -32,7 +31,6 @@ class Pcfg:
                 nb_terms += proba
             for term, proba in term_proba.items():
                 term_proba[term] = proba / nb_terms
-        self.compute_preterminals()
 
     def parse(self, word):
         if len(word) == 0:
@@ -62,26 +60,6 @@ class Pcfg:
                 chain.append([self.type[char], 1])
         base = '_'.join([_type+str(occ) for _type, occ in chain])
         self.base[base] += 1
-
-    def compute_preterminals(self):
-        for base, proba in self.base.items():
-            _type_str = base.split('_')
-            self.recursive_preterminals(_type_str, proba, '')
-
-    def recursive_preterminals(self, _type_str, base_proba, processed):
-        if len(_type_str) == 0:
-            self.preterminals[processed] = base_proba
-            return
-        _type = _type_str[0]
-        if _type[0] == 'L':
-            if len(_type_str) != 1:
-                _type += '_'
-            self.recursive_preterminals(_type_str[1:], base_proba, processed+_type)
-            return
-        for term, proba in self.terminals[_type].items():
-            base_proba *= proba
-            processed += term
-            self.recursive_preterminals(_type_str[1:], base_proba, processed)
 
 if __name__ == '__main__':
     filename = sys.argv[1]
