@@ -5,6 +5,9 @@ import string
 from queue import PriorityQueue
 from collections import defaultdict as ddict
 
+import parse
+from _parse import ffi, lib as plib
+
 
 class Pcfg:
 	def __init__(self):
@@ -40,15 +43,13 @@ class Pcfg:
 		with open(filename) as _buffer:
 			for word in _buffer:
 				word = word.rstrip('\n\r')
-				self.parse(word)
+				self.cparse(word)
 		nb_bases = sum(self.base.values())
 		for _str, proba in self.base.items():
 			self.base[_str] = proba / nb_bases
 
 		for _str, term_proba in self.terminals.items():
-			nb_terms = 0
-			for term, proba in term_proba.items():
-				nb_terms += proba
+			nb_terms = sum([proba for proba in term_proba.values()])
 			for term, proba in term_proba.items():
 				term_proba[term] = proba / nb_terms
 
@@ -98,6 +99,29 @@ class Pcfg:
 		base = '_'.join([_type+str(occ) for _type, occ in chain])
 		self.base[base] += 1
 
+	def cparse(self, word):
+		if len(word) == 0 or len(word) >= 20:
+			return
+		try:
+			gramm = plib.parse(word.encode('ascii'))
+		except UnicodeEncodeError:
+			return
+		base = ffi.string(gramm.base).decode()
+		nbterms = gramm.nbterms
+		comp_base = list()
+		for i in range(nbterms):
+			term = ffi.string(gramm.terms[i]).decode()
+			term_len = len(term)
+			sous_base = base[0] + str(term_len)
+			if term in self.terminals[sous_base]:
+				self.terminals[sous_base][term] += 1
+			else:
+				self.terminals[sous_base][term]  = 1
+			comp_base.append(sous_base)
+			base = base[term_len:]
+		base = '_'.join(comp_base)
+		self.base[base] += 1
+
 	def enumpwd(self, rate=1):
 		"""
 		Initialize the prority queue
@@ -110,7 +134,6 @@ class Pcfg:
 		"""
 		pq = PriorityQueue()
 		# init priority queue
-		print(len(self.base), file=sys.stderr)
 		for index, (base, proba) in enumerate(sorted(self.base.items(), key=lambda x:x[1], reverse=True)):
 			if (index/len(self.base)) > rate:
 				break
