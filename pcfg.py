@@ -14,7 +14,7 @@ class Pcfg:
 		# If letter is not lower or digit it's special
 		self.type = ddict(lambda: 'S')
 		for alpha in string.ascii_letters:
-			self.type[alpha] = 'L'
+			self.type[alpha] = 'P'
 		for digit in string.digits:
 			self.type[digit] = 'D'
 		""" e.g.
@@ -79,7 +79,7 @@ class Pcfg:
 				# L3, S1, D4, ...
 				type_str = ''.join([str(it) for it in chain[-1]])
 				# we don't care of alpha terminals
-				if type_str[0] != 'L':
+				if type_str[0] != 'P':
 					if curr_str in self.terminals.keys():
 						self.terminals[type_str][curr_str] += 1
 					else:
@@ -90,7 +90,7 @@ class Pcfg:
 				# L3, S1, D4, ...
 				type_str = ''.join([str(it) for it in chain[-1]])
 				# we don't care of alpha terminals
-				if type_str[0] != 'L':
+				if type_str[0] != 'P':
 					if curr_str in self.terminals.keys():
 						self.terminals[type_str][curr_str] += 1
 					else:
@@ -134,39 +134,56 @@ class Pcfg:
 		"""
 		pq = PriorityQueue()
 		# init priority queue
-		for index, (base, proba) in enumerate(sorted(self.base.items(), key=lambda x:x[1], reverse=True)):
+		bases_items = sorted(self.base.items(), key=lambda x:x[1], reverse=True)
+		term_max = dict()
+		for index, (base, proba) in enumerate(bases_items):
 			if (index/len(self.base)) > rate:
 				break
 			preterm = list()
 			prob = proba
 			for _type_str in base.split('_'):
-				if _type_str[0] == 'L':
+				if _type_str[0] == 'P':
 					preterm.append(_type_str)
 					continue
-				term_probas = self.terminals[_type_str]
-				highest = max(term_probas.items(), key=lambda x:x[1])
+				if _type_str not in term_max:
+					term_probas = self.terminals[_type_str]
+					highest = max(term_probas.items(), key=lambda x:x[1])
+					term_max[_type_str] = highest
+				else:
+					highest = term_max[_type_str]
 				preterm.append(highest[0])
 				proba *= highest[1]
 			# to reverse the queue order, we want the highest proba first
 			pq.put((1-proba, base, preterm, 0))
 
 		# start enumeration
+		gen = dict()
 		while not pq.empty():
 			prob, base, preterm, pivot = pq.get()
 			prob = 1-prob
 			self.print(preterm)
+			p = tuple(preterm)
+			if (p, pivot) not in gen:
+				gen[(p, pivot)] = 1
+			else:
+				continue
 			type_str = base.split('_')
+			put = 0
 			for index in range(pivot, len(type_str)):
 				cur_term = preterm[index]
-				if cur_term[0] == 'L': continue
+				if cur_term[0] == 'P':
+					continue
 				cur_term_proba = self.terminals[type_str[index]][cur_term]
 				_next = self.next(type_str[index], cur_term)
-				if _next is None: continue
+				if _next is None:
+					continue
 				next_term, proba = _next
 				preterm[index] = next_term
 				prob /= cur_term_proba
 				prob *= proba
 				pq.put((1-prob, base, preterm, index))
+				put += 1
+			print(put, pq.qsize())
 
 	def next(self, type_str, cur_term):
 		"""
@@ -177,7 +194,9 @@ class Pcfg:
 		if type_str in self.ordered_terms:
 			ordered_terms = self.ordered_terms[type_str]
 		else:
-			ordered_terms = sorted(self.terminals[type_str].items(), key=lambda x:x[1])
+			ordered_terms = sorted(self.terminals[type_str].items(),
+									key=lambda x:x[1],
+									reverse=True)
 			self.ordered_terms[type_str] = ordered_terms
 		if cur_term == ordered_terms[-1][0]:
 			return None
@@ -187,6 +206,7 @@ class Pcfg:
 		return ordered_terms[index+1]
 
 	def print(self, preterm):
+		return
 		print('_'.join(preterm))
 
 if __name__ == '__main__':
