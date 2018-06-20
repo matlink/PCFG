@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import sys
+import math
 import string
 from queue import PriorityQueue
 from collections import defaultdict as ddict
@@ -10,7 +11,7 @@ from _parse import ffi, lib as plib
 
 
 class Pcfg:
-	def __init__(self):
+	def __init__(self, do_print=True):
 		# If letter is not lower or digit it's special
 		self.type = ddict(lambda: 'S')
 		for alpha in string.ascii_letters:
@@ -32,6 +33,10 @@ class Pcfg:
 		"""
 		self.terminals = ddict(dict)
 		self.ordered_terms = dict()
+		if do_print:
+			self.print = print
+		else:
+			self.print = lambda x:None
 
 	def learn(self, filename):
 		"""
@@ -132,6 +137,8 @@ class Pcfg:
 		next most probable preterminal of the given
 		base structure and add it to the queue.
 		"""
+		_types = ['insert', 'ssbase', 'next', 'sort']
+		self.move = {t:0 for t in _types}
 		pq = PriorityQueue()
 		# init priority queue
 		bases_items = sorted(self.base.items(), key=lambda x:x[1], reverse=True)
@@ -142,11 +149,15 @@ class Pcfg:
 			preterm = list()
 			prob = proba
 			for _type_str in base.split('_'):
+				self.move['ssbase'] += 1
 				if _type_str[0] == 'P':
 					preterm.append(_type_str)
 					continue
 				if _type_str not in term_max:
 					term_probas = self.terminals[_type_str]
+					n = len(term_probas.items())
+					self.move['sort'] += math.ceil(n * math.log2(n))
+					self.move['next'] += 1
 					highest = max(term_probas.items(), key=lambda x:x[1])
 					term_max[_type_str] = highest
 				else:
@@ -154,6 +165,10 @@ class Pcfg:
 				preterm.append(highest[0])
 				proba *= highest[1]
 			# to reverse the queue order, we want the highest proba first
+			if pq.qsize():
+				self.move['insert'] += math.ceil(math.log2(pq.qsize()))
+			else:
+				self.move['insert'] += 1
 			pq.put((1-proba, base, preterm, 0))
 
 		# start enumeration
@@ -162,18 +177,23 @@ class Pcfg:
 			prob, base, preterm, pivot = pq.get()
 			prob = 1-prob
 			self.print(preterm)
+			for t in _types:
+				print(t, self.move[t], end=' ')
+				self.move[t] = 0
+			print()
 			p = tuple(preterm)
 			if (p, pivot) not in gen:
 				gen[(p, pivot)] = 1
 			else:
 				continue
 			type_str = base.split('_')
-			put = 0
 			for index in range(pivot, len(type_str)):
+				self.move['ssbase'] += 1
 				cur_term = preterm[index]
 				if cur_term[0] == 'P':
 					continue
 				cur_term_proba = self.terminals[type_str[index]][cur_term]
+				self.move['next'] += 1
 				_next = self.next(type_str[index], cur_term)
 				if _next is None:
 					continue
@@ -181,9 +201,8 @@ class Pcfg:
 				preterm[index] = next_term
 				prob /= cur_term_proba
 				prob *= proba
+				self.move['insert'] += math.ceil(math.log2(pq.qsize()))
 				pq.put((1-prob, base, preterm, index))
-				put += 1
-			print(put, pq.qsize())
 
 	def next(self, type_str, cur_term):
 		"""
@@ -194,24 +213,23 @@ class Pcfg:
 		if type_str in self.ordered_terms:
 			ordered_terms = self.ordered_terms[type_str]
 		else:
+			n = len(self.terminals[type_str].items())
+			self.move['sort'] += math.ceil(n * math.log2(n))
 			ordered_terms = sorted(self.terminals[type_str].items(),
 									key=lambda x:x[1],
 									reverse=True)
 			self.ordered_terms[type_str] = ordered_terms
 		if cur_term == ordered_terms[-1][0]:
 			return None
+		# ---> replace with binary search
 		for index, (term, proba) in enumerate(ordered_terms):
 			if term == cur_term:
 				break
 		return ordered_terms[index+1]
 
-	def print(self, preterm):
-		return
-		print('_'.join(preterm))
-
 if __name__ == '__main__':
 	filename = sys.argv[1]
-	pcfg = Pcfg()
+	pcfg = Pcfg(do_print=False)
 	print('parsing ...', file=sys.stderr)
 	pcfg.learn(filename)
 	print('enum ...', file=sys.stderr)
