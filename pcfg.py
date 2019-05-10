@@ -3,6 +3,7 @@
 import sys
 import math
 import string
+import pickle
 from queue import PriorityQueue
 from collections import defaultdict as ddict
 
@@ -10,7 +11,6 @@ import parse
 from _parse import ffi, lib as plib
 
 def S(): return 'S'
-def n(x): return None
 
 class Pcfg:
 	def __init__(self, do_print=True, count=False):
@@ -36,10 +36,12 @@ class Pcfg:
 		self.terminals = ddict(dict)
 		self.ordered_terms = dict()
 		self.count = count
-		if do_print:
-			self.print = print
-		else:
-			self.print = n
+		self.do_print = do_print
+
+	def print(self, preterm):
+		if not self.do_print:
+			return
+		print(''.join(preterm))
 
 	def learn(self, filename):
 		"""
@@ -220,19 +222,20 @@ class Pcfg:
 		return ordered_terms[index+1]
 
 if __name__ == '__main__':
+	# wether load the grammar from the binary dump or not
 	load = False
-	load = True
+	# load = True
+	# wether the learning file is formatted like "occurences word"
 	count = False
 	# count = True
-	filename = sys.argv[1]
-	bindump = sys.argv[2]
+	filename = sys.argv[1] # the file to learn the grammar from
+	bindump = sys.argv[2] # save the grammar to that file
 	if not load:
-		pcfg = Pcfg(do_print=False, count=count)
+		pcfg = Pcfg(do_print=True, count=count)
 		print('parsing ...', file=sys.stderr)
 		pcfg.learn(filename)
 		pickle.dump(pcfg, open(bindump, 'wb'))
 	else:
 		pcfg = pickle.load(open(bindump, 'rb'))
-		pcfg.print = n
 	print('enum ...', file=sys.stderr)
 	pcfg.enumpwd()
